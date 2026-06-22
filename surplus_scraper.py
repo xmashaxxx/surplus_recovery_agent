@@ -175,61 +175,80 @@ def scrape_hillsborough(headless=True):
     return records
 
 
+def _legacy_parse_miami_dade(html):
+    """
+    BeautifulSoup fallback parser for the Miami-Dade surplus page.
+
+    Called automatically by html_to_records() when the Claude API is
+    unavailable or returns malformed JSON. Preserved here so the scraper
+    remains functional without an API key.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    records = []
+
+    # Miami-Dade typically uses a table with columns:
+    # Case Number | Owner Name | Address | Sale Date | Surplus Amount
+    for table in soup.find_all("table"):
+        headers = [th.get_text(strip=True).lower() for th in table.find_all("th")]
+        if not any(k in " ".join(headers) for k in ["owner", "surplus", "case"]):
+            continue
+
+        col = {h: i for i, h in enumerate(headers)}
+
+        for row in table.find_all("tr")[1:]:
+            cells = [td.get_text(strip=True) for td in row.find_all("td")]
+            if len(cells) < 3:
+                continue
+
+            def _get(key_fragment, _cells=cells, _col=col):
+                for h, i in _col.items():
+                    if key_fragment in h and i < len(_cells):
+                        return _cells[i]
+                return None
+
+            records.append({
+                "former_owner":     _get("owner"),
+                "property_address": _get("address"),
+                "surplus_amount":   parse_amount(_get("surplus") or _get("amount")),
+                "sale_date":        _get("date"),
+                "case_number":      _get("case"),
+                "county":           "Miami-Dade",
+                "state":            "FL",
+                "notes":            None,
+            })
+
+    return records
+
+
 def scrape_miami_dade():
     """
-    Miami-Dade County, FL — static HTML.
-    Surplus funds page: lists former owners and amounts directly.
+    Miami-Dade County, FL — static HTML, agentic parser.
+
+    Fetches the surplus page and delegates extraction to html_to_records()
+    in agentic_parser.py (Claude Haiku). Falls back to _legacy_parse_miami_dade()
+    if the API is unavailable or returns bad JSON.
     """
+    from agentic_parser import html_to_records
+
     print("  [Miami-Dade] Fetching page...")
-    url = "https://www.miami-dadeclerk.com/clerkserv/surplus.asp"
+    url = COUNTY_CONFIG["miami_dade"]["url"]
 
     try:
-        resp = requests.get(url, timeout=15,
-                            headers={"User-Agent": "Mozilla/5.0"})
+        resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
         resp.raise_for_status()
     except requests.RequestException as e:
         print(f"  [Miami-Dade] Request failed: {e}")
         return []
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    records = []
-
-    # Miami-Dade typically uses a table with columns:
-    # Case Number | Owner Name | Address | Sale Date | Surplus Amount
-    tables = soup.find_all("table")
-    for table in tables:
-        headers = [th.get_text(strip=True).lower()
-                   for th in table.find_all("th")]
-        if not any(k in " ".join(headers) for k in ["owner", "surplus", "case"]):
-            continue
-
-        rows = table.find_all("tr")[1:]
-        for row in rows:
-            cells = [td.get_text(strip=True) for td in row.find_all("td")]
-            if len(cells) < 3:
-                continue
-
-            # Map columns based on header order (flexible)
-            col = {h: i for i, h in enumerate(headers)}
-            def get(key_fragment, fallback=None):
-                for h, i in col.items():
-                    if key_fragment in h and i < len(cells):
-                        return cells[i]
-                return fallback
-
-            records.append({
-                "former_owner":      get("owner"),
-                "property_address":  get("address"),
-                "surplus_amount":    parse_amount(get("surplus") or get("amount")),
-                "sale_date":         get("date"),
-                "case_number":       get("case"),
-                "county":            "Miami-Dade",
-                "state":             "FL",
-                "notes":             None,
-            })
+    records = html_to_records(
+        resp.text,
+        county="Miami-Dade",
+        state="FL",
+        fallback_fn=_legacy_parse_miami_dade,
+    )
 
     if not records:
-        print("  [Miami-Dade] No table data found — site structure may have changed.")
+        print("  [Miami-Dade] No records extracted — site structure may have changed.")
         print(f"  [Miami-Dade] Check manually: {url}")
 
     return records
