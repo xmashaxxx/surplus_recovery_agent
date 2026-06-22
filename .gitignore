@@ -216,3 +216,33 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# ════════════════════════════════════════════════════════════
+# PROJECT-SPECIFIC — protect real people's data and API keys
+# ════════════════════════════════════════════════════════════
+
+# Real surplus pipeline output — contains names, addresses,
+# and financial info of actual former homeowners. NEVER commit.
+pipeline/
+output/
+*.xlsx
+*.xls
+*.csv
+
+# Saved HTML pages from county sites — may contain real records
+test_pages/
+saved_html/
+*.html
+
+# API keys and Google service-account credentials
+.env
+credentials.json
+service-account*.json
+google-credentials.json
+*.key
+
+# OS junk
+Thumbs.db
+.DS_Store
+desktop.ini
