@@ -234,6 +234,8 @@ output/
 test_pages/
 saved_html/
 *.html
+# ...except synthetic fixtures that contain only fabricated test data
+!tests/fixtures/*synthetic*.html
 
 # API keys and Google service-account credentials
 .env
