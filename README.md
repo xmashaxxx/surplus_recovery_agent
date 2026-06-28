@@ -7,7 +7,7 @@ contacts former owners about funds they are legally entitled to claim. The
 extraction layer is powered by Claude (Haiku 4.5) using the Anthropic tool-use
 API, with a deterministic BeautifulSoup parser preserved as a fallback. The
 technical thesis is straightforward: county clerk pages are inconsistently
-maintained, frequently redesigned, and occasionally retired without notice — a
+maintained, frequently redesigned, and occasionally retired without notice, a
 parser that *understands* a surplus table is more durable than one wired to a
 specific DOM path, and pairing it with a deterministic fallback gives you the
 resilience of an LLM with the floor of a hand-written scraper.
@@ -48,25 +48,25 @@ resilience of an LLM with the floor of a hand-written scraper.
 
 **Key modules**
 
-- `agentic_parser.py` — the LLM extraction layer. `html_to_records(html, county, state, fallback_fn=None)` is the single public entry point. Internally it pre-slices to the largest `<table>` block, defines an `extract_surplus_records` tool with a strict JSON schema (`former_owner`, `property_address`, `surplus_amount`, `sale_date`, `case_number`, `notes` — all nullable, all required), and pins `tool_choice` to that tool. Claude returns a `tool_use` block whose `input` already deserialises into a Python dict — no markdown stripping, no `json.loads()`, no format drift.
-- `surplus_scraper.py` — fetch layer plus the legacy parser. `_legacy_parse_miami_dade()` is the BeautifulSoup implementation that previously did all of the extraction; it is now retained as the `fallback_fn` argument passed into `html_to_records()`. If the API key is missing, the SDK is not installed, or the API call fails for any reason, the agentic parser invokes this function and the pipeline keeps producing records.
-- `tests/test_html_parser.py` — comparison harness. Runs both parsers against the same fixture and asserts they agree on record count (within a 10% tolerance), that the critical fields (`former_owner`, `property_address`, `case_number`) are populated on the first record from each side, and that the pre-slice step reduces multi-table HTML down to exactly one table before it ever reaches the model.
-- `save_snapshot.py` — one-shot utility for refreshing the local HTML fixture against the live Miami-Dade page (when reachable from the environment).
-- `outreach_automation.py` — the downstream consumer. It expects the record schema produced by `html_to_records()` and is intentionally decoupled from the extraction layer.
+- `agentic_parser.py`: the LLM extraction layer. `html_to_records(html, county, state, fallback_fn=None)` is the single public entry point. Internally it pre-slices to the largest `<table>` block, defines an `extract_surplus_records` tool with a strict JSON schema (`former_owner`, `property_address`, `surplus_amount`, `sale_date`, `case_number`, `notes` — all nullable, all required), and pins `tool_choice` to that tool. Claude returns a `tool_use` block whose `input` already deserialises into a Python dict — no markdown stripping, no `json.loads()`, no format drift.
+- `surplus_scraper.py`: fetch layer plus the legacy parser. `_legacy_parse_miami_dade()` is the BeautifulSoup implementation that previously did all of the extraction; it is now retained as the `fallback_fn` argument passed into `html_to_records()`. If the API key is missing, the SDK is not installed, or the API call fails for any reason, the agentic parser invokes this function and the pipeline keeps producing records.
+- `tests/test_html_parser.py`: comparison harness. Runs both parsers against the same fixture and asserts they agree on record count (within a 10% tolerance), that the critical fields (`former_owner`, `property_address`, `case_number`) are populated on the first record from each side, and that the pre-slice step reduces multi-table HTML down to exactly one table before it ever reaches the model.
+- `save_snapshot.py`: one-shot utility for refreshing the local HTML fixture against the live Miami-Dade page (when reachable from the environment).
+- `outreach_automation.py`: the downstream consumer. It expects the record schema produced by `html_to_records()` and is intentionally decoupled from the extraction layer.
 
 ## The reality of building against real-world data
 
 The demo was designed around three live target sites. Two of them no longer
 behave the way they did when the project was scoped:
 
-- **Miami-Dade Clerk surplus page** — the URL hardcoded into the original
+- **Miami-Dade Clerk surplus page**  the URL hardcoded into the original
   scraper now returns a 404 / silent redirect to a restructured clerk portal.
   The page that exists today is not the page the regex selectors were written
   against.
-- **Fulton County, GA** — the comparable surplus listing has moved behind a
+- **Fulton County, GA**  the comparable surplus listing has moved behind a
   third-party auction platform; the original public URL no longer serves
   surplus data.
-- **Broward County (`broward.realforeclose.com`)** — investigated as a
+- **Broward County (`broward.realforeclose.com`)**  investigated as a
   replacement. Found to be (a) returning HTTP 403 to every request from cloud
   / datacenter IP ranges (block sits at the AWS load balancer, IP-range based,
   not solvable from a server-side environment), and (b) structured as an
@@ -80,7 +80,7 @@ behave the way they did when the project was scoped:
 
 This is the actual point of the project. The original hand-written scraper
 would have continued to "succeed" against 404 pages and silently produce empty
-result sets in production — the kind of failure that is invisible until
+result sets in production. the kind of failure that is invisible until
 someone notices the outreach queue has been empty for a month. The agentic
 system was built to surface these failures (each layer logs why it fell back),
 degrade gracefully (the legacy parser keeps the pipeline running even when the
