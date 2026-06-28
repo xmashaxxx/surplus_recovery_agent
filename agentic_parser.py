@@ -1,16 +1,20 @@
 """
-Agentic HTML parser — uses Claude Haiku to extract surplus records from raw HTML.
+Agentic HTML parser — uses Claude Haiku with tool-use to extract surplus records
+from raw HTML.
 
 Entry point: html_to_records(html, county, state, fallback_fn=None)
 
 Strategy:
   1. Pre-slice the HTML to the largest <table> block to reduce noise and tokens.
-  2. Send to Claude Haiku with a strict JSON-only extraction prompt.
-  3. If the API key is missing, the package isn't installed, or the response
-     is not valid JSON, call fallback_fn(html) when provided. Return [] otherwise.
+  2. Call Claude Haiku with a tool definition (extract_surplus_records) and
+     tool_choice forced to that tool, guaranteeing a schema-conformant structured
+     response. Tool-use is used instead of free-text JSON because it eliminates
+     markdown fence wrapping and guarantees the output matches our field schema —
+     no json.loads(), no format-coercion, no "please return only JSON" gymnastics.
+  3. If the API key is missing, the package isn't installed, or the API call
+     fails for any reason, call fallback_fn(html) when provided. Return [] otherwise.
 """
 
-import json
 import os
 import re
 
@@ -25,20 +29,48 @@ from bs4 import BeautifulSoup
 _MODEL = "claude-haiku-4-5-20251001"
 
 _SYSTEM_PROMPT = """\
-You are a data extraction tool. Given raw HTML from a county surplus funds webpage,
-extract every surplus record you can find into a JSON array.
+You are a data extraction tool. Given HTML from a county surplus funds webpage,
+call the extract_surplus_records tool with every surplus record you find.
 
-Return ONLY a JSON array — no explanation, no markdown fences, no other text.
-If you find no records, return an empty array: []
-
-Each element must have exactly these keys:
-  former_owner, property_address, surplus_amount, sale_date, case_number, notes
-
-Rules:
-- surplus_amount: the dollar value as a plain number (e.g. 12345.67), or null
+Rules for field values:
+- surplus_amount: extract the numeric dollar value as a plain number (e.g. 12345.67),
+  or null if not present
 - sale_date: preserve the date exactly as written on the page, or null
 - notes: any extra text that doesn't fit another field, or null
-- If a field is absent, use null — never omit the key"""
+- Use null for any absent field"""
+
+_EXTRACT_TOOL = {
+    "name": "extract_surplus_records",
+    "description": (
+        "Return all surplus fund records found in the HTML. "
+        "Call this once with the complete list — do not call it per record."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "records": {
+                "type": "array",
+                "description": "All surplus records extracted from the HTML.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "former_owner":     {"type": ["string", "null"]},
+                        "property_address": {"type": ["string", "null"]},
+                        "surplus_amount":   {"type": ["number", "null"]},
+                        "sale_date":        {"type": ["string", "null"]},
+                        "case_number":      {"type": ["string", "null"]},
+                        "notes":            {"type": ["string", "null"]},
+                    },
+                    "required": [
+                        "former_owner", "property_address", "surplus_amount",
+                        "sale_date", "case_number", "notes",
+                    ],
+                },
+            }
+        },
+        "required": ["records"],
+    },
+}
 
 
 def _largest_table_html(html):
@@ -88,7 +120,12 @@ def _call_fallback(html, fallback_fn):
 
 def html_to_records(html, county, state, fallback_fn=None):
     """
-    Extract surplus records from raw HTML using Claude Haiku.
+    Extract surplus records from raw HTML using Claude Haiku with tool-use.
+
+    Tool-use (tool_choice forced to extract_surplus_records) guarantees
+    schema-conformant structured output: the SDK deserialises the response
+    directly into a Python dict, bypassing all JSON-parsing and prompt-
+    engineering workarounds needed with free-text responses.
 
     Parameters
     ----------
@@ -96,7 +133,7 @@ def html_to_records(html, county, state, fallback_fn=None):
     county      : county name for the 'county' field in each record
     state       : two-letter state abbreviation
     fallback_fn : optional callable fallback_fn(html) -> list[dict]
-                  called if the API is unavailable or returns bad JSON
+                  called if the API is unavailable or the call fails for any reason
 
     Returns a list of dicts with keys:
       former_owner, property_address, surplus_amount (float|None),
@@ -120,6 +157,8 @@ def html_to_records(html, county, state, fallback_fn=None):
             model=_MODEL,
             max_tokens=2048,
             system=_SYSTEM_PROMPT,
+            tools=[_EXTRACT_TOOL],
+            tool_choice={"type": "tool", "name": "extract_surplus_records"},
             messages=[
                 {
                     "role": "user",
@@ -127,13 +166,12 @@ def html_to_records(html, county, state, fallback_fn=None):
                 }
             ],
         )
-        raw_text = msg.content[0].text.strip()
-        parsed = json.loads(raw_text)
-        if not isinstance(parsed, list):
-            raise ValueError(f"Expected JSON array, got {type(parsed).__name__}")
-    except json.JSONDecodeError as e:
-        print(f"  [agentic_parser] Claude returned malformed JSON ({e}) — falling back.")
-        return _call_fallback(html, fallback_fn)
+        block = msg.content[0]
+        if block.type != "tool_use":
+            raise ValueError(f"Expected tool_use block, got {block.type!r}")
+        raw_records = block.input.get("records", [])
+        if not isinstance(raw_records, list):
+            raise ValueError(f"Expected 'records' list, got {type(raw_records).__name__}")
     except ValueError as e:
         print(f"  [agentic_parser] Unexpected response shape ({e}) — falling back.")
         return _call_fallback(html, fallback_fn)
@@ -141,4 +179,4 @@ def html_to_records(html, county, state, fallback_fn=None):
         print(f"  [agentic_parser] API error ({e}) — falling back.")
         return _call_fallback(html, fallback_fn)
 
-    return [_normalize(item, county, state) for item in parsed if isinstance(item, dict)]
+    return [_normalize(item, county, state) for item in raw_records if isinstance(item, dict)]
