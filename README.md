@@ -48,7 +48,7 @@ resilience of an LLM with the floor of a hand-written scraper.
 
 **Key modules**
 
-- `agentic_parser.py`: the LLM extraction layer. `html_to_records(html, county, state, fallback_fn=None)` is the single public entry point. Internally it pre-slices to the largest `<table>` block, defines an `extract_surplus_records` tool with a strict JSON schema (`former_owner`, `property_address`, `surplus_amount`, `sale_date`, `case_number`, `notes` — all nullable, all required), and pins `tool_choice` to that tool. Claude returns a `tool_use` block whose `input` already deserialises into a Python dict — no markdown stripping, no `json.loads()`, no format drift.
+- `agentic_parser.py`: the LLM extraction layer. `html_to_records(html, county, state, fallback_fn=None)` is the single public entry point. Internally it pre-slices to the largest `<table>` block, defines an `extract_surplus_records` tool with a strict JSON schema (`former_owner`, `property_address`, `surplus_amount`, `sale_date`, `case_number`, `notes`: all nullable, all required), and pins `tool_choice` to that tool. Claude returns a `tool_use` block whose `input` already deserialises into a Python dict, no markdown stripping, no `json.loads()`, no format drift.
 - `surplus_scraper.py`: fetch layer plus the legacy parser. `_legacy_parse_miami_dade()` is the BeautifulSoup implementation that previously did all of the extraction; it is now retained as the `fallback_fn` argument passed into `html_to_records()`. If the API key is missing, the SDK is not installed, or the API call fails for any reason, the agentic parser invokes this function and the pipeline keeps producing records.
 - `tests/test_html_parser.py`: comparison harness. Runs both parsers against the same fixture and asserts they agree on record count (within a 10% tolerance), that the critical fields (`former_owner`, `property_address`, `case_number`) are populated on the first record from each side, and that the pre-slice step reduces multi-table HTML down to exactly one table before it ever reaches the model.
 - `save_snapshot.py`: one-shot utility for refreshing the local HTML fixture against the live Miami-Dade page (when reachable from the environment).
@@ -70,7 +70,7 @@ behave the way they did when the project was scoped:
   replacement. Found to be (a) returning HTTP 403 to every request from cloud
   / datacenter IP ranges (block sits at the AWS load balancer, IP-range based,
   not solvable from a server-side environment), and (b) structured as an
-  *auction bidding platform* rather than a surplus listing — the data shape is
+  *auction bidding platform* rather than a surplus listing, the data shape is
   different even if you do reach the page. On top of that, Broward is in the
   middle of migrating both of its auction platforms to a new RealAuction
   vendor (new platform went live 2026-07-01), so building against the current
@@ -87,9 +87,9 @@ degrade gracefully (the legacy parser keeps the pipeline running even when the
 API path can't), and remain valid against the *structure* of the data rather
 than a specific URL that may not exist next quarter.
 
-A second real-world constraint shaped the demo itself: the project owner is
+A second real-world constraint shaped the demo itself: is
 operating from Russia, which means residential-IP access to US county clerk
-sites isn't available from the development environment. Rather than fake live
+sites isn't available from the development environment. Rather than faking live
 access, the demo validates against a structurally-faithful synthetic fixture
 (described below) and documents the live-data deployment plan explicitly.
 
