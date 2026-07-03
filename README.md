@@ -96,7 +96,7 @@ access, the demo validates against a structurally-faithful synthetic fixture
 ## Validation
 
 The demo is validated against
-[`tests/fixtures/miami_dade_synthetic.html`](tests/fixtures/miami_dade_synthetic.html) — a
+[`tests/fixtures/miami_dade_synthetic.html`](tests/fixtures/miami_dade_synthetic.html) a
 synthetic HTML file that mirrors the chrome and table structure of the
 historical Miami-Dade surplus page (nav, header, breadcrumb, multiple tables,
 one main data table) but contains entirely fabricated records. No real
@@ -117,7 +117,7 @@ schema-conformant tool-use response on the first call.
 
 **Fixture freshness.** The synthetic fixture date is **2026-06-28**. To refresh
 it against the live Miami-Dade page once that URL is reachable again, run
-`python save_snapshot.py` from a residential-IP environment — it will fetch
+`python save_snapshot.py` from a residential-IP environment, it will fetch
 the live page, write `tests/fixtures/miami_dade_snapshot.html`, and print the
 new snapshot date.
 
@@ -139,7 +139,7 @@ The path from demo to live production has three steps, in order of effort:
    `requests.get()` → `html_to_records()` shape with no architectural change.
 3. **Promote to a multi-agent orchestrator.** Counties fall into three
    distinct classes: static HTML (Miami-Dade, Brevard, Lee — handled by the
-   current pattern), third-party auction platforms (RealAuction, GovEase —
+   current pattern), third-party auction platforms (RealAuction, GovEase
    need session/cookie handling), and JS-rendered single-page apps
    (Hillsborough — already uses Selenium). The phased plan for routing each
    county to the right fetch strategy while keeping a single normalised record
@@ -202,9 +202,6 @@ That is the deliberate test of the fallback path.
 
 This project was built in collaboration with
 [Claude Code](https://claude.com/claude-code) as a visible co-author on each
-commit — including the agentic-parser rewrite that this README documents.
-Developed as part of the Claude Corps program.
+commit; including the agentic-parser rewrite and this README document.
 
-## License
 
-MIT. See [LICENSE](LICENSE).
